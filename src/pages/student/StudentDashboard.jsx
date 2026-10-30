@@ -1,6 +1,9 @@
 import { useEffect, useState, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchMyEnrollments } from "../../store/slices/enrollmentSlice";
+import {
+  fetchMyEnrollments,
+  unenrollCourseAsync,
+} from "../../store/slices/enrollmentSlice";
 import { Link } from "react-router-dom";
 import { getQuizStats } from "../../services/quiz.api";
 import { getAssignmentStats } from "../../services/assignment.api";
@@ -8,18 +11,50 @@ import { getCourseById } from "../../services/courses.api";
 
 export default function StudentDashboard() {
   const dispatch = useDispatch();
-  const { enrollments = [], loading, error } = useSelector((state) => state.enrollment || {});
+  const { enrollments = [], loading, error } = useSelector(
+    (state) => state.enrollment || {}
+  );
   const { currentCourse } = useSelector((state) => state.courses || {});
 
   const [expandedCourse, setExpandedCourse] = useState(null);
   const [courseStats, setCourseStats] = useState({});
   const [loadingStats, setLoadingStats] = useState({});
+  const [deletingId, setDeletingId] = useState(null);
+  const [targetEnrollment, setTargetEnrollment] = useState(null);
 
   const lessonTitleCache = useRef({});
 
   useEffect(() => {
     dispatch(fetchMyEnrollments());
   }, [dispatch]);
+
+  const openRemoveModal = (e, enrollment) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setTargetEnrollment(enrollment);
+  };
+
+  const closeRemoveModal = () => {
+    if (deletingId) return;
+    setTargetEnrollment(null);
+  };
+
+  const confirmRemove = async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!targetEnrollment?._id) return;
+
+    setDeletingId(targetEnrollment._id);
+    try {
+      await dispatch(unenrollCourseAsync(targetEnrollment._id)).unwrap();
+      setTargetEnrollment(null);
+    } catch (err) {
+      console.error("Failed to remove course:", err);
+      alert(err || "Failed to remove course");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const createLessonMap = (courseData) => {
     if (!courseData?.syllabus) return {};
@@ -174,12 +209,13 @@ export default function StudentDashboard() {
             const stats = courseStats[courseId];
             const isLoading = loadingStats[courseId];
 
-            // সেফ ক্যালকুলেশন: মোট লেসন ও প্রগ্রেস বের করা
-            const completedCount = enrollment.progress?.completedLessons?.length || 0;
-            const totalLessons = stats?.courseData?.syllabus?.reduce(
-              (acc, m) => acc + (m.lessons?.length || 0),
-              0
-            ) || 0;
+            const completedCount =
+              enrollment.progress?.completedLessons?.length || 0;
+            const totalLessons =
+              stats?.courseData?.syllabus?.reduce(
+                (acc, m) => acc + (m.lessons?.length || 0),
+                0
+              ) || 0;
 
             const calculatedPercent =
               totalLessons > 0
@@ -195,30 +231,45 @@ export default function StudentDashboard() {
                   {/* Course Header */}
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div className="flex-1 min-w-0">
-                      <h2 className="card-title text-lg sm:text-xl break-words">
+                      <h2 className="card-title text-lg sm:text-xl wrap-break-words">
                         {enrollment.course?.title || "Untitled Course"}
                       </h2>
                       <p className="text-xs sm:text-sm text-base-content/70 mt-1">
-                        Instructor: {enrollment.course?.instructorName || "Instructor"}
+                        Instructor:{" "}
+                        {enrollment.course?.instructorName || "Instructor"}
                       </p>
                     </div>
-                    <div className="flex gap-2 w-full sm:w-auto">
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
                       <button
+                        type="button"
                         onClick={() => handleExpandCourse(courseId)}
                         className="btn btn-sm btn-outline flex-1 sm:flex-none"
                       >
                         {isExpanded ? "Hide" : "Details"}
                       </button>
+
                       <Link
                         to={`/courses/${courseId}/player`}
                         className="btn btn-sm btn-primary flex-1 sm:flex-none"
                       >
                         Continue
                       </Link>
+
+                      {/* ✅ Remove Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => openRemoveModal(e, enrollment)}
+                        className="btn btn-sm btn-outline btn-error flex-1 sm:flex-none"
+                        title="Remove Course"
+                      >
+                        Remove
+                      </button>
                     </div>
                   </div>
 
-                  {/* Progress Bar - Safe Render */}
+                  {/* Progress Bar */}
                   <div className="mt-4 p-4 bg-base-200 rounded-lg">
                     <div className="flex justify-between items-center mb-3">
                       <div>
@@ -231,7 +282,8 @@ export default function StudentDashboard() {
                           </p>
                         ) : (
                           <p className="text-xs text-base-content/70 mt-1">
-                            {completedCount} lesson{completedCount !== 1 ? "s" : ""} completed
+                            {completedCount} lesson
+                            {completedCount !== 1 ? "s" : ""} completed
                           </p>
                         )}
                       </div>
@@ -260,7 +312,9 @@ export default function StudentDashboard() {
                           {stats.assignmentStats?.totalAssignments > 0 && (
                             <span>
                               📝 {stats.assignmentStats.totalAssignments} Assignment
-                              {stats.assignmentStats.totalAssignments !== 1 ? "s" : ""}
+                              {stats.assignmentStats.totalAssignments !== 1
+                                ? "s"
+                                : ""}
                             </span>
                           )}
                         </div>
@@ -268,7 +322,7 @@ export default function StudentDashboard() {
                     )}
                   </div>
 
-                  {/* Expanded Details */}
+                  {/* Expanded Stats Section */}
                   {isExpanded && (
                     <div className="mt-6 space-y-4 border-t border-base-300 pt-4">
                       {isLoading ? (
@@ -279,6 +333,7 @@ export default function StudentDashboard() {
                         <>
                           <div className="flex justify-end mb-2">
                             <button
+                              type="button"
                               onClick={() => handleRefreshStats(courseId)}
                               disabled={isLoading}
                               className="btn btn-sm btn-outline btn-circle"
@@ -299,7 +354,10 @@ export default function StudentDashboard() {
                                 </p>
                                 <p className="text-xs opacity-70">
                                   {stats.quizStats?.totalQuizzes || 0} quiz
-                                  {stats.quizStats?.totalQuizzes !== 1 ? "zes" : ""} taken
+                                  {stats.quizStats?.totalQuizzes !== 1
+                                    ? "zes"
+                                    : ""}{" "}
+                                  taken
                                 </p>
                               </div>
                             </div>
@@ -326,18 +384,26 @@ export default function StudentDashboard() {
                                 </h3>
                                 <p className="text-2xl sm:text-3xl font-bold">
                                   {(() => {
-                                    const quizAvg = stats.quizStats?.average || 0;
-                                    const assignAvg = stats.assignmentStats?.average || 0;
-                                    const quizCount = stats.quizStats?.totalQuizzes || 0;
-                                    const assignCount = stats.assignmentStats?.reviewedCount || 0;
+                                    const quizAvg =
+                                      stats.quizStats?.average || 0;
+                                    const assignAvg =
+                                      stats.assignmentStats?.average || 0;
+                                    const quizCount =
+                                      stats.quizStats?.totalQuizzes || 0;
+                                    const assignCount =
+                                      stats.assignmentStats?.reviewedCount || 0;
                                     const total = quizCount + assignCount;
                                     if (total === 0) return "N/A";
                                     return `${Math.round(
-                                      (quizAvg * quizCount + assignAvg * assignCount) / total
+                                      (quizAvg * quizCount +
+                                        assignAvg * assignCount) /
+                                        total
                                     )}%`;
                                   })()}
                                 </p>
-                                <p className="text-xs opacity-70">Weighted average</p>
+                                <p className="text-xs opacity-70">
+                                  Weighted average
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -349,6 +415,47 @@ export default function StudentDashboard() {
               </div>
             );
           })}
+        </div>
+      )}
+      {targetEnrollment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-base-100 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-base-300 animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="font-bold text-lg text-error flex items-center gap-2">
+              ⚠️ Confirm Course Removal
+            </h3>
+            <p className="py-4 text-base-content/80 text-sm sm:text-base leading-relaxed">
+              Are you sure you want to remove{" "}
+              <span className="font-semibold text-base-content">
+                "{targetEnrollment.course?.title || "this course"}"
+              </span>{" "}
+              from your dashboard? Your progress record for this course will be cleared.
+            </p>
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                type="button"
+                onClick={closeRemoveModal}
+                disabled={Boolean(deletingId)}
+                className="btn btn-ghost"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRemove}
+                disabled={Boolean(deletingId)}
+                className="btn btn-error text-white"
+              >
+                {deletingId ? (
+                  <>
+                    <span className="loading loading-spinner loading-xs"></span>
+                    Removing...
+                  </>
+                ) : (
+                  "Yes, Remove"
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

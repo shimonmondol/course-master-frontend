@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { loginUser } from "../../services/auth.api";
 import { saveToken } from "../../utils/auth";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Mail,
   Lock,
@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 export default function Login() {
+  const navigate = useNavigate();
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -60,13 +61,8 @@ export default function Login() {
         }
       }
 
-      // ৩. রোল অনুযায়ী ডিরেক্ট রিডাইরেক্ট (Admin -> /admin, Student -> /student)
-      const userRole = user?.role || "student";
-      if (userRole === "admin") {
-        window.location.assign("/admin");
-      } else {
-        window.location.assign("/student");
-      }
+      // ৩. এডমিন বা স্টুডেন্ট যেই হোক, সরাসরি হোমপেজে রিডাইরেক্ট
+      window.location.assign("/");
     } catch (err) {
       setError(
         err.response?.data?.message ||

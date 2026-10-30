@@ -8,8 +8,6 @@ import CoursesPagination from "./CoursesPagination";
 
 export default function CoursesSection() {
   const { user } = useSelector((state) => state.auth || {});
-
-  // Redux স্টেট না থাকলে localStorage থেকে রোল রিড
   const storedUser = (() => {
     try {
       return JSON.parse(localStorage.getItem("user"));
@@ -17,8 +15,8 @@ export default function CoursesSection() {
       return null;
     }
   })();
-  const currentUser = user || storedUser;
 
+  const currentUser = user || storedUser;
   const [courses, setCourses] = useState([]);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -48,7 +46,6 @@ export default function CoursesSection() {
 
       const res = await getCourses(params);
 
-      // রেসপন্স অবজেক্ট ঠিকভাবে হ্যান্ডেল করা (সরাসরি অ্যারে বা অবজেক্ট যাই আসুক)
       const coursesList =
         res.data?.courses ||
         res.data?.data?.courses ||
@@ -71,7 +68,6 @@ export default function CoursesSection() {
     }
   }, [page, limit, search, sort, category, tags]);
 
-  // ফিল্টার পরিবর্তনের জন্য ইফেক্ট (পেজ ১-এ রিসেট হবে)
   useEffect(() => {
     fetchCourses();
   }, [page, sort, category, tags, fetchCourses]);
@@ -84,7 +80,7 @@ export default function CoursesSection() {
 
   const handleFilterChange = (setter) => (value) => {
     setter(value);
-    setPage(1); // ফিল্টার চেঞ্জ হলেই পেজ ১ হবে
+    setPage(1);
   };
 
   return (
